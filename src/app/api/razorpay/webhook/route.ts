@@ -136,6 +136,9 @@ export async function POST(req: NextRequest) {
         {
           user_id: userId,
           subscription_status: nextStatus,
+          payment_provider: 'razorpay',
+          subscription_renewal_date: currentEnd,
+          razorpay_subscription_id: subscriptionId,
           preset: mergedPreset,
           updated_at: new Date().toISOString(),
         },

@@ -18,6 +18,16 @@ function normalizePlan(plan: string | undefined) {
   return plan === 'monthly' ? 'monthly' : 'annual';
 }
 
+function computeRenewalDate(plan: 'monthly' | 'annual') {
+  const now = new Date();
+  if (plan === 'monthly') {
+    now.setMonth(now.getMonth() + 1);
+  } else {
+    now.setFullYear(now.getFullYear() + 1);
+  }
+  return now.toISOString();
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as VerifyRequest;
@@ -44,6 +54,7 @@ export async function POST(req: NextRequest) {
     const plan = normalizePlan(body.plan);
     const currency = body.currency === 'USD' ? 'USD' : 'INR';
     const amount = typeof body.amount === 'number' ? body.amount : null;
+    const renewalDate = computeRenewalDate(plan);
 
     const supabase = getSupabaseAdmin();
     const { data: existingProfile } = await supabase
@@ -66,6 +77,7 @@ export async function POST(req: NextRequest) {
         amount,
         orderId: razorpayOrderId,
         paymentId: razorpayPaymentId,
+        renewalDate,
         verifiedAt: new Date().toISOString(),
       },
     };
@@ -76,6 +88,8 @@ export async function POST(req: NextRequest) {
         {
           user_id: userId,
           subscription_status: 'active',
+          payment_provider: 'razorpay',
+          subscription_renewal_date: renewalDate,
           preset: mergedPreset,
           updated_at: new Date().toISOString(),
         },
