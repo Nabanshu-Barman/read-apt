@@ -21,6 +21,9 @@ export default function PrivacyPage() {
             Readapt is designed to provide ADHD-friendly reading adaptation. We process only the information
             needed to provide and improve that core service.
           </p>
+          <p>
+            This page applies to the free version of Readapt currently available at read-apt.vercel.app.
+          </p>
         </section>
 
         <section className={styles.section}>
@@ -33,10 +36,6 @@ export default function PrivacyPage() {
             <li>
               <strong>Service Configuration Data:</strong> reading presets, focus settings, typography preferences,
               extension mode settings, and sync metadata.
-            </li>
-            <li>
-              <strong>Subscription and Billing Metadata:</strong> plan status, renewal dates, payment status,
-              and provider reference metadata required to manage access.
             </li>
             <li>
               <strong>User-Provided Reading Text:</strong> text you paste or submit for adaptation and summary features.
@@ -69,7 +68,6 @@ export default function PrivacyPage() {
             <li>authenticate users and secure accounts;</li>
             <li>deliver core adaptation features and personalization;</li>
             <li>sync settings between the website and extension when requested;</li>
-            <li>manage subscriptions, renewals, and service access;</li>
             <li>maintain, troubleshoot, and improve service reliability and performance;</li>
             <li>communicate service updates, account notices, and support responses.</li>
           </ul>
@@ -91,7 +89,6 @@ export default function PrivacyPage() {
           <p>We may share data with service providers only as needed to operate Readapt, such as:</p>
           <ul>
             <li>authentication and database infrastructure providers;</li>
-            <li>payment and subscription processors;</li>
             <li>hosting and operational tooling providers.</li>
           </ul>
           <p>
@@ -105,6 +102,10 @@ export default function PrivacyPage() {
           <p>
             We retain information for as long as needed to provide the service, comply with legal obligations,
             resolve disputes, and enforce agreements. Retention periods vary by data type and operational need.
+          </p>
+          <p>
+            You may request account deletion by contacting us. After a valid deletion request is completed,
+            account-linked personal data will be removed or anonymized except where we are required to retain it by law.
           </p>
         </section>
 

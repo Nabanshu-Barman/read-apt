@@ -32,6 +32,9 @@ export default function TermsPage() {
             Readapt is an assistive productivity and accessibility tool. It is not a medical device and does not provide
             medical advice, diagnosis, or treatment.
           </p>
+          <p>
+            The current Readapt web release is offered as a free service tier. Feature availability may change over time.
+          </p>
         </section>
 
         <section className={styles.section}>
@@ -47,23 +50,7 @@ export default function TermsPage() {
         </section>
 
         <section className={styles.section}>
-          <h2>4. Billing and Subscriptions</h2>
-          <p>
-            Paid plans renew on the billing cycle shown at checkout unless canceled before renewal. You authorize recurring
-            billing through our payment processors for active paid subscriptions.
-          </p>
-          <p>
-            You may cancel at any time. Unless required by law, fees already paid are non-refundable, and access continues
-            through the end of the current paid period.
-          </p>
-          <p>
-            We may change plan pricing or features in the future. Changes will apply prospectively and will not retroactively
-            alter charges already processed.
-          </p>
-        </section>
-
-        <section className={styles.section}>
-          <h2>5. License and Permitted Use</h2>
+          <h2>4. License and Permitted Use</h2>
           <p>
             Subject to your compliance with these Terms, Readapt grants you a limited, non-exclusive,
             non-transferable, revocable license to use the service for personal or internal business reading-adaptation use.
@@ -78,7 +65,7 @@ export default function TermsPage() {
         </section>
 
         <section className={styles.section}>
-          <h2>6. User Content and Responsibilities</h2>
+          <h2>5. User Content and Responsibilities</h2>
           <p>
             You are responsible for content you submit, paste, or process through Readapt, including ensuring you have the
             right to use that content. You must not submit unlawful, infringing, or malicious material.
@@ -90,7 +77,7 @@ export default function TermsPage() {
         </section>
 
         <section className={styles.section}>
-          <h2>7. Intellectual Property</h2>
+          <h2>6. Intellectual Property</h2>
           <p>
             Readapt, including software, branding, visual design, and related materials, is protected by intellectual
             property laws. Except for the limited license above, all rights are reserved by Readapt and its licensors.
@@ -98,9 +85,9 @@ export default function TermsPage() {
         </section>
 
         <section className={styles.section}>
-          <h2>8. Third-Party Services</h2>
+          <h2>7. Third-Party Services</h2>
           <p>
-            The service may rely on third-party providers (for example, authentication, hosting, and payments).
+            The service may rely on third-party providers (for example, authentication, database, and hosting services).
             Their terms and policies may apply to their portions of the service.
           </p>
           <p>
@@ -109,7 +96,7 @@ export default function TermsPage() {
         </section>
 
         <section className={styles.section}>
-          <h2>9. Disclaimer of Warranties</h2>
+          <h2>8. Disclaimer of Warranties</h2>
           <p>
             To the maximum extent permitted by law, Readapt is provided &quot;as is&quot; and &quot;as available,&quot; without warranties
             of any kind, whether express, implied, or statutory, including implied warranties of merchantability,
@@ -121,7 +108,7 @@ export default function TermsPage() {
         </section>
 
         <section className={styles.section}>
-          <h2>10. Limitation of Liability</h2>
+          <h2>9. Limitation of Liability</h2>
           <p>
             To the fullest extent permitted by law, Readapt and its affiliates will not be liable for indirect,
             incidental, special, consequential, exemplary, or punitive damages, or for loss of data, revenue,
@@ -129,12 +116,12 @@ export default function TermsPage() {
           </p>
           <p>
             To the extent liability cannot be excluded, our aggregate liability for claims related to the service
-            is limited to the amount you paid us in the 12 months preceding the event giving rise to the claim.
+            is limited to the maximum amount permitted by applicable law.
           </p>
         </section>
 
         <section className={styles.section}>
-          <h2>11. Indemnification</h2>
+          <h2>10. Indemnification</h2>
           <p>
             You agree to indemnify and hold harmless Readapt and its affiliates from claims, liabilities, and expenses
             arising from your misuse of the service, your violation of these Terms, or your infringement of third-party rights.
@@ -142,7 +129,7 @@ export default function TermsPage() {
         </section>
 
         <section className={styles.section}>
-          <h2>12. Suspension and Termination</h2>
+          <h2>11. Suspension and Termination</h2>
           <p>
             We may suspend or terminate access if you violate these Terms, create legal risk, or threaten service integrity.
             You may stop using the service at any time.
@@ -154,7 +141,7 @@ export default function TermsPage() {
         </section>
 
         <section className={styles.section}>
-          <h2>13. Governing Law and Disputes</h2>
+          <h2>12. Governing Law and Disputes</h2>
           <p>
             These Terms are governed by applicable law in the jurisdiction of service operation, without regard to
             conflict-of-law principles. You and Readapt agree to attempt good-faith resolution of disputes before
@@ -163,7 +150,7 @@ export default function TermsPage() {
         </section>
 
         <section className={styles.section}>
-          <h2>14. Changes to Terms</h2>
+          <h2>13. Changes to Terms</h2>
           <p>
             We may update these Terms from time to time. Material changes will be reflected by updating the effective date
             and, where appropriate, by additional notice.
@@ -174,7 +161,7 @@ export default function TermsPage() {
         </section>
 
         <section className={styles.section}>
-          <h2>15. Contact</h2>
+          <h2>14. Contact</h2>
           <p>For legal or terms-related inquiries, contact: joltmetric@gmail.com</p>
         </section>
       </main>
