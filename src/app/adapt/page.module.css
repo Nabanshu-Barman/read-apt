@@ -616,18 +616,29 @@
 }
 
 .sidebarBrandLink {
-  display: inline-flex;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
+  gap: 8px;
+  padding: 12px 0 4px;
   color: var(--text-primary);
-  font-weight: 600;
-  margin-right: auto;
-  margin-left: 2px;
+  text-decoration: none;
+  transition: opacity 160ms;
 }
 
+.sidebarBrandLink:hover { opacity: 0.8; }
+
 .sidebarBrandIcon {
-  border-radius: 6px;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(200, 169, 110, 0.22);
+}
+
+.sidebarBrandName {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
 }
 
 .sidebarPresetTitle {
@@ -983,4 +994,74 @@
   .toolbar { gap: 4px; padding: 0 12px; }
   .toolbarLogo { display: none; }
   .summaryDrawer { width: 100%; }
+}
+
+/* ─── Sign-Up Gate Overlay ─────────────────────────────────── */
+.signUpGate {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 10, 12, 0.80);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: gateIn 320ms var(--ease-out-expo) both;
+}
+
+@keyframes gateIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.signUpGateCard {
+  background: var(--bg-surface);
+  border: 1px solid rgba(200, 169, 110, 0.28);
+  border-radius: var(--radius-2xl);
+  padding: 48px 40px 40px;
+  max-width: 440px;
+  width: calc(100% - 32px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.6);
+  animation: cardUp 380ms var(--ease-out-expo) both;
+}
+
+@keyframes cardUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.signUpGateLogo {
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  margin-bottom: 4px;
+}
+
+.signUpGateTitle {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+}
+
+.signUpGateSub {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: 1.6;
+  max-width: 320px;
+}
+
+.signUpGateBtns {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  margin-top: 8px;
 }

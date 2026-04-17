@@ -90,7 +90,6 @@ export default function Header({ minimalWhenAuthed = false }: HeaderProps) {
           <nav className={styles.nav}>
             <Link href="/#features" className={styles.navLink}>Features</Link>
             <Link href="/about" className={styles.navLink}>Science</Link>
-            <Link href="/pricing" className={styles.navLink}>Pricing</Link>
           </nav>
         )}
 
@@ -126,7 +125,6 @@ export default function Header({ minimalWhenAuthed = false }: HeaderProps) {
         <div className={styles.mobileMenu}>
           <Link href="/#features" onClick={() => setMenuOpen(false)}>Features</Link>
           <Link href="/about" onClick={() => setMenuOpen(false)}>Science</Link>
-          <Link href="/pricing" onClick={() => setMenuOpen(false)}>Pricing</Link>
           <Link href="/auth/login" onClick={() => setMenuOpen(false)}>Log In</Link>
           <Link href="/quiz" className="btn btn-primary" onClick={() => setMenuOpen(false)}>Get Started</Link>
         </div>

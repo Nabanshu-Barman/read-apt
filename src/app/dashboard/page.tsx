@@ -3,21 +3,14 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { CHROME_WEBSTORE_URL, SUPPORT_EMAIL } from '@/lib/publicLinks';
+import { CHROME_WEBSTORE_URL } from '@/lib/publicLinks';
 import { getSupabaseBrowserClient } from '@/lib/supabaseClient';
 import styles from './page.module.css';
 
-type DashTab = 'profile' | 'extension' | 'subscription';
+type DashTab = 'profile' | 'extension';
 
 type UserProfile = {
   quiz_score: number | null;
-  subscription_status: string | null;
-  preset?: Record<string, unknown> | null;
-  subscription_renewal_date?: string | null;
-  subscription_current_period_end?: string | null;
-  razorpay_subscription_id?: string | null;
-  razorpay_customer_id?: string | null;
-  updated_at?: string | null;
 };
 
 function getDisplayName(email: string, name?: string | null) {
@@ -26,20 +19,12 @@ function getDisplayName(email: string, name?: string | null) {
   return email.split('@')[0];
 }
 
-function getPlanLabel(status: string | null) {
-  return status === 'active' ? 'Pro' : 'Free';
-}
-
 export default function DashboardPage() {
   const router = useRouter();
   const [tab, setTab] = useState<DashTab>('profile');
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState('User');
   const [quizScore, setQuizScore] = useState<number | null>(null);
-  const [plan, setPlan] = useState<'Pro' | 'Free'>('Free');
-  const [subscriptionStatusRaw, setSubscriptionStatusRaw] = useState<string | null>(null);
-  const [renewalDate, setRenewalDate] = useState<string | null>(null);
-  const [subscriptionId, setSubscriptionId] = useState<string | null>(null);
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -67,26 +52,7 @@ export default function DashboardPage() {
         if (res.ok) {
           const payload = (await res.json()) as { profile?: UserProfile | null };
           if (payload.profile) {
-            const presetSubscription =
-              payload.profile.preset
-              && typeof payload.profile.preset === 'object'
-              && typeof payload.profile.preset.subscription === 'object'
-                ? (payload.profile.preset.subscription as Record<string, unknown>)
-                : null;
-
             setQuizScore(typeof payload.profile.quiz_score === 'number' ? payload.profile.quiz_score : null);
-            setPlan(getPlanLabel(payload.profile.subscription_status));
-            setSubscriptionStatusRaw(payload.profile.subscription_status ?? null);
-            setSubscriptionId(
-              payload.profile.razorpay_subscription_id
-              ?? (typeof presetSubscription?.subscriptionId === 'string' ? presetSubscription.subscriptionId : null)
-            );
-            setRenewalDate(
-              payload.profile.subscription_renewal_date
-                ?? payload.profile.subscription_current_period_end
-                ?? (typeof presetSubscription?.renewalDate === 'string' ? presetSubscription.renewalDate : null)
-                ?? null
-            );
           }
         }
       } catch {
@@ -118,14 +84,6 @@ export default function DashboardPage() {
   }
 
   const avatarLetter = userName.charAt(0).toUpperCase();
-  const isSubscribed = plan === 'Pro';
-  const renewalLabel = renewalDate
-    ? new Date(renewalDate).toLocaleDateString(undefined, {
-        year: 'numeric',
-        month: 'short',
-        day: '2-digit',
-      })
-    : 'Not available yet';
 
   return (
     <div className={styles.page}>
@@ -156,55 +114,52 @@ export default function DashboardPage() {
             </button>
           ))}
 
-          {isSubscribed && (
-            <button
-              className={`${styles.navItem} ${tab === 'subscription' ? styles.navItemActive : ''}`}
-              onClick={() => setTab('subscription')}
-            >
-              💳 Manage Subscription
-            </button>
-          )}
-
           <Link href="/about" className={styles.navLink}>ℹ️ About</Link>
         </nav>
 
-        <Link href="/paste" className={styles.adaptBtn}>Open Reader →</Link>
+        <Link href="/paste" className={styles.adaptBtn} id="dash-open-reader-sidebar">Open Reader →</Link>
         <button className={styles.logoutBtn} onClick={handleLogout}>Log Out</button>
       </aside>
 
       <main className={styles.main}>
         {tab === 'profile' && (
           <div className={styles.tabContent}>
-            <div className={styles.brandHero}>
-              <Image src="/logo.png" alt="Readapt" width={94} height={94} className={styles.brandHeroLogo} priority />
-              <div>
-                <h1 className={styles.tabTitle}>Readapt Dashboard</h1>
-                <p className={styles.tabSub}>Welcome back, {userName}.</p>
+            {/* ── Hero CTA area ── */}
+            <div className={styles.heroSection}>
+              <div className={styles.animItem} style={{ '--delay': '0ms' } as React.CSSProperties}>
+                <div className={styles.greeting}>Welcome back, {userName}.</div>
+                <p className={styles.greetingSub}>Your reading space is ready.</p>
+              </div>
+
+              <div className={styles.ctaGroup} style={{ '--delay': '80ms' } as React.CSSProperties}>
+                <div className={styles.animItem} style={{ '--delay': '80ms' } as React.CSSProperties}>
+                  <Link
+                    href="/paste"
+                    className={`btn btn-primary ${styles.primaryCta}`}
+                    id="dash-open-reader"
+                  >
+                    Open Reader
+                  </Link>
+                </div>
+                <div className={styles.animItem} style={{ '--delay': '160ms' } as React.CSSProperties}>
+                  <Link
+                    href="/quiz"
+                    className={`btn btn-ghost ${styles.secondaryCta}`}
+                    id="dash-take-quiz"
+                  >
+                    Take Quiz
+                  </Link>
+                </div>
               </div>
             </div>
 
-            <div className={styles.scoreCard}>
+            {/* ── Quiz score card ── */}
+            <div className={`${styles.scoreCard} ${styles.animItem}`} style={{ '--delay': '240ms' } as React.CSSProperties}>
               <div className={styles.scoreCardLeft}>
                 <div className={styles.scoreNum}>{quizScore ?? '--'}<span className={styles.scoreMax}>/24</span></div>
                 <div className={styles.scoreBand}>Latest quiz score</div>
               </div>
               <Link href="/quiz" className="btn btn-ghost">Take Quiz</Link>
-            </div>
-
-            <div className={styles.section}>
-              <h2 className={styles.sectionTitle}>Current Plan</h2>
-              <p className={styles.sectionDesc}>Manage your subscription from one place.</p>
-              <div className={styles.planCardInline}>
-                <div>
-                  <div className={styles.planBadge}>Plan: {plan}</div>
-                  <p className={styles.planDesc}>
-                    {plan === 'Pro' ? 'You have full access to all reading features.' : 'Upgrade to unlock all premium reading features.'}
-                  </p>
-                </div>
-                {plan === 'Free' && (
-                  <Link href="/pricing" className="btn btn-primary">Upgrade to Pro</Link>
-                )}
-              </div>
             </div>
           </div>
         )}
@@ -230,33 +185,6 @@ export default function DashboardPage() {
                   </div>
                 </div>
               ))}
-            </div>
-          </div>
-        )}
-
-        {tab === 'subscription' && isSubscribed && (
-          <div className={styles.tabContent}>
-            <h1 className={styles.tabTitle}>Manage Subscription</h1>
-            <p className={styles.tabSub}>Your current billing details and renewal info.</p>
-
-            <div className={styles.section}>
-              <h2 className={styles.sectionTitle}>Current Status</h2>
-              <div className={styles.planCardInline}>
-                <div>
-                  <div className={styles.planBadge}>Status: {subscriptionStatusRaw || 'active'}</div>
-                  <p className={styles.planDesc}>Plan: Pro</p>
-                  <p className={styles.planDesc}>Renewal date: {renewalLabel}</p>
-                  {subscriptionId && <p className={styles.planDesc}>Subscription ID: {subscriptionId}</p>}
-                </div>
-              </div>
-            </div>
-
-            <div className={styles.section}>
-              <h2 className={styles.sectionTitle}>Need to change billing?</h2>
-              <p className={styles.sectionDesc}>Until Razorpay self-serve customer portal is wired, contact support to cancel or modify billing.</p>
-              <a href={`mailto:${SUPPORT_EMAIL}?subject=Readapt%20Subscription%20Support`} className="btn btn-ghost">
-                Contact Billing Support
-              </a>
             </div>
           </div>
         )}

@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useRef, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import {
@@ -13,6 +13,7 @@ import {
 } from '@/lib/adaptEngine';
 import { CUSTOM_SETTINGS_KEY, READING_TEXT_KEY } from '@/lib/readingSession';
 import { getSupabaseBrowserClient } from '@/lib/supabaseClient';
+import AdaptTour from '@/components/AdaptTour';
 import styles from './page.module.css';
 
 type CustomBuilderSettings = {
@@ -38,12 +39,17 @@ const BG_OPTIONS = [
 ];
 const DEFAULT_BG_COLOR = BG_OPTIONS[0].color;
 
-// Shared 5-minute preview pool for Preset B AND Preset C
-const PRESET_PREVIEW_MS = 5 * 60 * 1000;
-const PRESET_PREVIEW_KEY = 'readapt:presetPreview'; // renamed from presetBPreview
+// Session-level 5-minute gate for unauthenticated users (page-scoped, all presets)
+const SESSION_GATE_MS = 5 * 60 * 1000;
+const SESSION_START_KEY = 'readapt:sessionStart'; // sessionStorage
 const EXTENSION_SYNC_GUEST_KEY = 'readapt:extensionSyncGuest';
 const EXTENSION_SYNC_ACK_TIMEOUT_MS = 1600;
 const ADAPT_CONTROL_PREFS_KEY = 'readapt:adaptControlPrefs';
+const ADAPT_ACTIVE_PRESET_KEY = 'readapt:activePreset';
+
+function normalizePresetId(raw: string | null | undefined): PresetId {
+  return raw === 'A' || raw === 'B' || raw === 'C' ? raw : 'B';
+}
 
 type PresetControlPrefs = {
   focusMode: boolean;
@@ -70,16 +76,7 @@ function getDefaultPresetControlPrefs(preset: PresetId): PresetControlPrefs {
   };
 }
 
-function getUtcDayKey(date = new Date()) {
-  return date.toISOString().slice(0, 10);
-}
 
-function formatMsAsClock(ms: number) {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-}
 
 function getTextColor(bg: string) {
   const light = ['#F5F0E8', '#EEF2EC'];
@@ -206,23 +203,33 @@ function waitForGoogleUkEnglishFemaleVoice(timeoutMs = 1500): Promise<SpeechSynt
 
 function AdaptPage() {
   const router = useRouter();
-  const params = useSearchParams();
-  const initialPreset = (params.get('preset') as PresetId) || 'B';
+  const initialPreset = normalizePresetId(
+    typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('preset') : null
+  );
+
+  const initialPresetState = (() => {
+    if (typeof window === 'undefined') return initialPreset;
+    try {
+      const stored = sessionStorage.getItem(ADAPT_ACTIVE_PRESET_KEY);
+      return normalizePresetId(stored);
+    } catch {
+      return initialPreset;
+    }
+  })();
 
   const [rawText, setRawText] = useState('');
-  const [preset, setPreset] = useState<PresetId>(initialPreset);
+  const [preset, setPreset] = useState<PresetId>(initialPresetState);
   const [bg, setBg] = useState(DEFAULT_BG_COLOR);
   const [fontSize, setFontSize] = useState(0);
-  const [focusMode, setFocusMode] = useState(initialPreset !== 'A');
-  const [focusLineEnabled, setFocusLineEnabled] = useState(PRESETS[initialPreset].focusLine);
-  const [chunkingEnabled, setChunkingEnabled] = useState(PRESETS[initialPreset].sentenceChunking);
+  const [focusMode, setFocusMode] = useState(initialPresetState !== 'A');
+  const [focusLineEnabled, setFocusLineEnabled] = useState(PRESETS[initialPresetState].focusLine);
+  const [chunkingEnabled, setChunkingEnabled] = useState(PRESETS[initialPresetState].sentenceChunking);
   const [bionicEnabled, setBionicEnabled] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sectionOpen, setSectionOpen] = useState({
     reading: true,
     focus: true,
     appearance: true,
-    advanced: true,
   });
   const [ttsActive, setTtsActive] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
@@ -231,13 +238,11 @@ function AdaptPage() {
   const [summaryBullets, setSummaryBullets] = useState<string[]>([]);
   const [revealIndex, setRevealIndex] = useState(0);
   const [customSettings, setCustomSettings] = useState<CustomBuilderSettings | null>(null);
-  const [isPro, setIsPro] = useState(false);
-  const [planChecked, setPlanChecked] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
-  // Shared preview pool for both Preset B and Preset C
-  const [previewRemainingMs, setPreviewRemainingMs] = useState(PRESET_PREVIEW_MS);
-  const [upgradeNudge, setUpgradeNudge] = useState<string | null>(null);
-  const [presetReverting, setPresetReverting] = useState(false);
+  const [isAuthed, setIsAuthed] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
+  // Session-level sign-up gate for unauthenticated users
+  const [showSignUpGate, setShowSignUpGate] = useState(false);
   const [extensionSyncState, setExtensionSyncState] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
   const [extensionSyncMeta, setExtensionSyncMeta] = useState('Ready to sync');
 
@@ -264,11 +269,6 @@ function AdaptPage() {
     : presetConfig;
 
   const actualFontSize = fontSize || activeConfig.fontSize;
-  const isPreviewLocked = planChecked && !isPro && previewRemainingMs <= 0 && (preset === 'B' || preset === 'C');
-  const canUseFocusMode = preset !== 'A' && !isPreviewLocked;
-  const freePreviewActive = !isPro && previewRemainingMs > 0;
-  const canUseCustomBuilder = preset === 'C' && !isPreviewLocked && (isPro || freePreviewActive);
-  const canUseSummary = preset !== 'A' && !isPreviewLocked && (isPro || (freePreviewActive && (preset === 'B' || preset === 'C')));
   const summaryText = summaryBullets.join(' ');
   const displayText = showSummary && summaryText ? summaryText : rawText;
 
@@ -276,104 +276,115 @@ function AdaptPage() {
   const allChunks = adapted.flatMap((p) => p.chunks);
   const chunkParagraphs = adapted.map((p) => p.chunks);
 
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(ADAPT_ACTIVE_PRESET_KEY, preset);
+    } catch {
+      // Ignore storage access failures.
+    }
+
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('preset') !== preset) {
+      url.searchParams.set('preset', preset);
+      const next = `${url.pathname}?${url.searchParams.toString()}`;
+      window.history.replaceState({}, '', next);
+    }
+  }, [preset]);
+
   let chunkCounter = 0;
   const chunkIndexMap = chunkParagraphs.map((par) => par.map(() => chunkCounter++));
 
-  // ── Load Pro status ──────────────────────────────────────────────
+  // ── Check auth status & start session gate timer ─────────────────
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
 
-    async function loadPlan() {
+    async function checkAuth() {
       try {
         const { data } = await supabase.auth.getUser();
         const user = data.user;
-        if (!user) {
-          setUserId(null);
-          setIsPro(false);
-          setPlanChecked(true);
+        if (user) {
+          setUserId(user.id);
+          setIsAuthed(true);
+          setAuthChecked(true);
           return;
         }
+        // Unauthenticated — start or resume session timer
+        setUserId(null);
+        setIsAuthed(false);
+        setAuthChecked(true);
 
-        setUserId(user.id);
-
-        const res = await fetch(`/api/presets?userId=${encodeURIComponent(user.id)}`, { cache: 'no-store' });
-        if (!res.ok) {
-          setIsPro(false);
-          setPlanChecked(true);
-          return;
+        try {
+          const stored = sessionStorage.getItem(SESSION_START_KEY);
+          if (!stored) {
+            sessionStorage.setItem(SESSION_START_KEY, String(Date.now()));
+          } else {
+            // If we reload and already past 5 min, show gate immediately
+            const elapsed = Date.now() - Number(stored);
+            if (elapsed >= SESSION_GATE_MS) {
+              setShowSignUpGate(true);
+            }
+          }
+        } catch {
+          // sessionStorage may be blocked in private browsing — silently skip gate
         }
-
-        const payload = (await res.json()) as {
-          profile?: {
-            subscription_status?: string | null;
-          } | null;
-        };
-
-        setIsPro(payload.profile?.subscription_status === 'active');
-        setPlanChecked(true);
       } catch {
         setUserId(null);
-        setIsPro(false);
-        setPlanChecked(true);
+        setIsAuthed(false);
+        setAuthChecked(true);
       }
     }
 
-    loadPlan();
-  }, []);
+    checkAuth();
 
-  useEffect(() => {
-    return () => {
-      if (syncResetTimerRef.current !== null) {
-        window.clearTimeout(syncResetTimerRef.current);
+    // Also listen for auth state changes (e.g. user signs in from another tab)
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setUserId(session.user.id);
+        setIsAuthed(true);
+        setShowSignUpGate(false);
+      } else {
+        setUserId(null);
+        setIsAuthed(false);
       }
-    };
+    });
+
+    return () => { sub.subscription.unsubscribe(); };
   }, []);
 
-  // ── Load shared preview pool from localStorage ───────────────────
+  // ── Session gate countdown (runs only for unauthenticated users) ──
   useEffect(() => {
-    const today = getUtcDayKey();
+    if (!authChecked || isAuthed) return;
+
+    let interval: number | null = null;
+
     try {
-      const raw = localStorage.getItem(PRESET_PREVIEW_KEY);
-      if (!raw) {
-        setPreviewRemainingMs(PRESET_PREVIEW_MS);
-        return;
-      }
+      const stored = sessionStorage.getItem(SESSION_START_KEY);
+      if (!stored) return;
 
-      const parsed = JSON.parse(raw) as { day?: string; remainingMs?: number };
-      if (parsed.day !== today || typeof parsed.remainingMs !== 'number') {
-        // New day — reset the pool
-        setPreviewRemainingMs(PRESET_PREVIEW_MS);
-        localStorage.setItem(PRESET_PREVIEW_KEY, JSON.stringify({ day: today, remainingMs: PRESET_PREVIEW_MS }));
-        return;
-      }
+      const startTime = Number(stored);
 
-      setPreviewRemainingMs(Math.max(0, Math.min(PRESET_PREVIEW_MS, parsed.remainingMs)));
+      const check = () => {
+        if (isAuthed) {
+          if (interval !== null) window.clearInterval(interval);
+          return;
+        }
+        const elapsed = Date.now() - startTime;
+        if (elapsed >= SESSION_GATE_MS) {
+          setShowSignUpGate(true);
+          if (interval !== null) window.clearInterval(interval);
+        }
+      };
+
+      check(); // immediate check
+      interval = window.setInterval(check, 1000);
     } catch {
-      setPreviewRemainingMs(PRESET_PREVIEW_MS);
+      // sessionStorage unavailable — skip timer
     }
-  }, []);
-
-  // ── Persist preview pool to localStorage ────────────────────────
-  useEffect(() => {
-    if (isPro) return;
-    const today = getUtcDayKey();
-    localStorage.setItem(PRESET_PREVIEW_KEY, JSON.stringify({ day: today, remainingMs: previewRemainingMs }));
-  }, [isPro, previewRemainingMs]);
-
-  // ── Countdown timer — runs when free user is on B or C ──────────
-  useEffect(() => {
-    if (isPro) return;
-    if (preset !== 'B' && preset !== 'C') return;
-    if (previewRemainingMs <= 0) return;
-
-    const timer = window.setInterval(() => {
-      setPreviewRemainingMs((prev) => Math.max(0, prev - 1000));
-    }, 1000);
 
     return () => {
-      window.clearInterval(timer);
+      if (interval !== null) window.clearInterval(interval);
     };
-  }, [isPro, preset, previewRemainingMs]);
+  }, [authChecked, isAuthed]);
 
   // ── Load extension sync status ───────────────────────────────────
   useEffect(() => {
@@ -449,38 +460,6 @@ function AdaptPage() {
     };
   }, [userId]);
 
-  // ── Show lock nudge when preview expires on B/C ─────────────────
-  useEffect(() => {
-    if (isPro) return;
-    if (preset !== 'B' && preset !== 'C') return;
-    if (previewRemainingMs > 0) return;
-
-    setPresetReverting(true);
-    const lockedPayload = {
-      presetId: 'A',
-      source: 'web',
-      syncedAt: new Date().toISOString(),
-      lock: {
-        presetLocked: preset,
-        reason: 'preview-expired',
-      },
-    };
-
-    void pushSyncPayloadToExtension(lockedPayload);
-    try {
-      localStorage.setItem(
-        EXTENSION_SYNC_GUEST_KEY,
-        JSON.stringify(lockedPayload)
-      );
-    } catch {
-      // Ignore local sync write failures.
-    }
-
-    const resetAnim = window.setTimeout(() => setPresetReverting(false), 420);
-    return () => window.clearTimeout(resetAnim);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPro, preset, previewRemainingMs]);
-
   // ── Load reading text & custom settings ─────────────────────────
   useEffect(() => {
     const text = localStorage.getItem(READING_TEXT_KEY) || '';
@@ -528,20 +507,11 @@ function AdaptPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Apply stored prefs when preset changes ──────────────────────
+  // ── Apply stored prefs when preset changes ────────────────────
   useEffect(() => {
     if (!controlPrefsReadyRef.current) return;
 
     suppressPrefsPersistRef.current = true;
-
-    if (!isPro && previewRemainingMs <= 0 && (preset === 'B' || preset === 'C')) {
-      setFocusMode(false);
-      setFocusLineEnabled(false);
-      window.requestAnimationFrame(() => {
-        suppressPrefsPersistRef.current = false;
-      });
-      return;
-    }
 
     const presetPrefs = controlPrefsRef.current[preset] ?? getDefaultPresetControlPrefs(preset);
     setFocusMode(preset === 'A' ? false : presetPrefs.focusMode);
@@ -552,7 +522,7 @@ function AdaptPage() {
     window.requestAnimationFrame(() => {
       suppressPrefsPersistRef.current = false;
     });
-  }, [isPro, preset, previewRemainingMs]);
+  }, [preset]);
 
   // ── Persist current control prefs per preset ────────────────────
   useEffect(() => {
@@ -690,49 +660,12 @@ function AdaptPage() {
       return;
     }
 
-    // B or C — requires preview time or Pro
-    if (!isPro && previewRemainingMs <= 0) {
-      setPreset(p);
-      setFocusMode(false);
-      return;
-    }
-
     setPreset(p);
     setFocusMode(true);
     setFocusLineEnabled(p === 'C' ? true : PRESETS[p].focusLine);
   }
 
   async function handleSyncWithExtension() {
-    if (isPreviewLocked) {
-      const lockedPayload = {
-        presetId: 'A',
-        source: 'web',
-        syncedAt: new Date().toISOString(),
-        lock: {
-          presetLocked: preset,
-          reason: 'preview-expired',
-        },
-      };
-
-      const extensionBridgeOk = await pushSyncPayloadToExtension(lockedPayload);
-
-      try {
-        localStorage.setItem(
-          EXTENSION_SYNC_GUEST_KEY,
-          JSON.stringify(lockedPayload)
-        );
-      } catch {
-        // Ignore local sync write failures.
-      }
-      setExtensionSyncState('error');
-      setExtensionSyncMeta(
-        extensionBridgeOk
-          ? `Preset ${preset} is locked. Extension fallback is Preset A.`
-          : `Preset ${preset} is locked. Load extension on this tab to sync fallback.`
-      );
-      return;
-    }
-
     setExtensionSyncState('syncing');
     setExtensionSyncMeta('Syncing current preset...');
 
@@ -740,7 +673,6 @@ function AdaptPage() {
       const settingsPayload: Record<string, unknown> = {
         presetId: preset,
         profileName: PRESETS[preset].profileName,
-        isPro,
         bionicEnabled,
         chunkingEnabled,
         focusMode,
@@ -869,16 +801,13 @@ function AdaptPage() {
   // focusLineLength removed — focus line now always spans full text column width
   const focusLineFill = hexToRgba(focusLineColor, focusLineOpacity);
 
-  // Low time warning: amber pulse when < 60 seconds left
-  const isLowTime = !isPro && (preset === 'B' || preset === 'C') && previewRemainingMs > 0 && previewRemainingMs <= 60000;
-
   const presetInfo = {
     A: { name: 'Mild', accent: '#5AB98C' },
     B: { name: 'Moderate', accent: '#C8A96E' },
     C: { name: 'Intense', accent: '#9B8EC4' },
   } as const;
 
-  const renderSectionHeader = (id: 'reading' | 'focus' | 'appearance' | 'advanced', label: string) => (
+  const renderSectionHeader = (id: 'reading' | 'focus' | 'appearance', label: string) => (
     <button className={styles.sectionHeaderBtn} onClick={() => setSectionOpen((s) => ({ ...s, [id]: !s[id] }))}>
       <span>{label}</span>
       <span>{sectionOpen[id] ? '▾' : '▸'}</span>
@@ -887,12 +816,9 @@ function AdaptPage() {
 
   return (
     <div className={`${styles.adaptLayout} ${sidebarCollapsed ? styles.sidebarCollapsed : ''}`}>
-      <section ref={canvasRef} className={styles.readingCanvas} style={{ background: pageBackground, color: pageTextColor }}>
-        {upgradeNudge && (
-          <div className={styles.upgradeNudge}>{upgradeNudge}</div>
-        )}
+      <section ref={canvasRef} id="tour-reading-canvas" className={styles.readingCanvas} style={{ background: pageBackground, color: pageTextColor }}>
 
-        {focusMode && focusLineEnabled && canUseFocusMode && (
+        {focusMode && focusLineEnabled && preset !== 'A' && (
           <div
             className={styles.canvasFocusLine}
             style={{
@@ -908,7 +834,7 @@ function AdaptPage() {
 
         <div
           ref={contentRef}
-          className={`${styles.textContainer} ${presetReverting ? styles.presetRevertAnim : ''}`}
+          className={styles.textContainer}
           style={{
             maxWidth: activeConfig.maxWidth,
             fontFamily: preset === 'C' && customSettings ? customSettings.fontFamily : 'Literata, Georgia, serif',
@@ -924,13 +850,7 @@ function AdaptPage() {
           )}
           {summaryError && <p className={styles.summaryInlineError}>{summaryError}</p>}
 
-          {isPreviewLocked ? (
-            <div className={styles.lockedPresetCard}>
-              <h3>Preset {preset} is locked</h3>
-              <p>Upgrade to Pro to keep using this mode after your daily preview window.</p>
-              <Link href="/pricing" className="btn btn-primary">Upgrade to Pro</Link>
-            </div>
-          ) : (preset === 'B' || preset === 'C') ? (
+          {(preset === 'B' || preset === 'C') ? (
             <div className={styles.chunkFlow}>
               {chunkParagraphs.map((paragraphChunks, paragraphIndex) => (
                 <div key={paragraphIndex} className={styles.chunkParagraph} style={{ marginBottom: activeConfig.paragraphSpacing }}>
@@ -979,10 +899,15 @@ function AdaptPage() {
             <p>You&apos;ve finished reading.</p>
             <div className={styles.endStateBtns}>
               <button
+                id="tour-back-btn"
                 className="btn btn-ghost"
+                style={{
+                  color: pageTextColor,
+                  borderColor: pageTextColor === '#1A1814' ? 'rgba(26,24,20,0.45)' : 'rgba(240,237,234,0.45)',
+                }}
                 onClick={() => router.push('/paste?preset=A')}
               >
-                Back to Paste and use Preset A only
+                Back to Paste Text
               </button>
             </div>
           </div>
@@ -994,10 +919,6 @@ function AdaptPage() {
           <div className={styles.sidebarHeaderBlock}>
             <div className={styles.sidebarHeaderTop}>
               <button className={styles.sidebarBackBtn} onClick={() => router.push(`/paste?preset=${preset}`)}>← Back</button>
-              <Link href="/dashboard" className={styles.sidebarBrandLink}>
-                <Image src="/logo.png" alt="Readapt" width={18} height={18} className={styles.sidebarBrandIcon} />
-                <span>Readapt</span>
-              </Link>
               <button
                 className={styles.sidebarCollapseIconBtn}
                 onClick={() => setSidebarCollapsed(true)}
@@ -1007,67 +928,65 @@ function AdaptPage() {
                 ›
               </button>
             </div>
+            <Link href="/dashboard" className={styles.sidebarBrandLink}>
+              <Image src="/logo.png" alt="Readapt" width={44} height={44} className={styles.sidebarBrandIcon} priority />
+              <span className={styles.sidebarBrandName}>Readapt</span>
+            </Link>
             <div className={styles.sidebarPresetTitle}>Preset {preset}</div>
             <div className={styles.sidebarPresetSub}>{PRESETS[preset].profileName}</div>
-            {planChecked && !isPro && (preset === 'B' || preset === 'C') && (
-              <div className={`${styles.sidebarTimerChip} ${isLowTime ? styles.sidebarTimerChipLow : ''}`}>
-                <span className={styles.previewTimerDot} />
-                Preset Preview Remaining: <span className={styles.previewTimerClock}>{formatMsAsClock(previewRemainingMs)}</span>
-              </div>
-            )}
           </div>
         )}
 
         {!sidebarCollapsed ? (
           <>
-            <div className={styles.presetSelectorGrid}>
-              {(['A', 'B', 'C'] as PresetId[]).map((p) => {
-                const isPreviewPreset = !isPro && (p === 'B' || p === 'C');
-                const isPreviewUsed = isPreviewPreset && previewRemainingMs <= 0;
-                return (
-                  <button
-                    key={p}
-                    className={`${styles.presetCardBtn} ${preset === p ? styles.presetCardActive : ''}`}
-                    style={{ borderColor: preset === p ? presetInfo[p].accent : 'var(--bg-border)' }}
-                    onClick={() => handlePresetClick(p)}
-                  >
-                    <div className={styles.presetCardTop}>
-                      <span>{p}</span>
-                      {isPreviewPreset && !isPreviewUsed && <span className={styles.presetBadge}>{formatMsAsClock(previewRemainingMs)}</span>}
-                      {isPreviewPreset && isPreviewUsed && <span className={styles.presetBadge}>Used</span>}
-                    </div>
-                    <div className={styles.presetCardLabel}>{presetInfo[p].name}</div>
-                  </button>
-                );
-              })}
+            <div id="tour-preset-selector" className={styles.presetSelectorGrid}>
+              {(['A', 'B', 'C'] as PresetId[]).map((p) => (
+                <button
+                  key={p}
+                  className={`${styles.presetCardBtn} ${preset === p ? styles.presetCardActive : ''}`}
+                  style={{ borderColor: preset === p ? presetInfo[p].accent : 'var(--bg-border)' }}
+                  onClick={() => handlePresetClick(p)}
+                >
+                  <div className={styles.presetCardTop}>
+                    <span>{p}</span>
+                  </div>
+                  <div className={styles.presetCardLabel}>{presetInfo[p].name}</div>
+                </button>
+              ))}
             </div>
-            {isPreviewLocked ? (
-              <div className={styles.presetLockedNotice}>
-                Upgrade to Pro to use Preset {preset}
-              </div>
-            ) : (
-              <>
+            <>
                 <div className={styles.extensionSyncPanel}>
                   <div className={styles.extensionSyncLabel}>Extension Sync</div>
                   <button
+                    id="tour-sync-btn"
                     className={`${styles.extensionSyncBtn} ${extensionSyncState === 'synced' ? styles.extensionSyncBtnSynced : ''}`}
                     onClick={handleSyncWithExtension}
                     disabled={extensionSyncState === 'syncing'}
                   >
                     {extensionSyncState === 'syncing' ? 'Syncing...' : extensionSyncState === 'synced' ? '\u2713 Synced' : 'Sync with Extension'}
                   </button>
+                  {preset === 'C' && (
+                    <button
+                      id="tour-custom-builder-btn"
+                      className={styles.extensionSyncBtn}
+                      style={{ marginTop: '8px', background: 'rgba(155, 142, 196, 0.18)', borderColor: 'rgba(155, 142, 196, 0.5)', color: 'var(--text-primary)' }}
+                      onClick={() => router.push('/custom-builder')}
+                    >
+                      Open Custom Builder
+                    </button>
+                  )}
                   <div className={styles.extensionSyncMeta}>{extensionSyncMeta}</div>
                 </div>
 
-                <div className={styles.sidebarSection}>
+                <div id="tour-reading-style-section" className={styles.sidebarSection}>
                   {renderSectionHeader('reading', 'Reading Style')}
                   {sectionOpen.reading && (
                     <div className={styles.sectionBody}>
-                      <div className={styles.controlRow}><span>Bionic Reading</span><button className={`${styles.smallToggle} ${bionicEnabled ? styles.smallToggleOn : ''}`} onClick={() => setBionicEnabled((v) => !v)}>{bionicEnabled ? 'On' : 'Off'}</button></div>
+                      <div id="tour-bionic-toggle" className={styles.controlRow}><span>Bionic Reading</span><button className={`${styles.smallToggle} ${bionicEnabled ? styles.smallToggleOn : ''}`} onClick={() => setBionicEnabled((v) => !v)}>{bionicEnabled ? 'On' : 'Off'}</button></div>
                       <div className={styles.readOnlyLine}>Intensity: {activeConfig.bionicIntensity.toFixed(2)}</div>
                       {preset !== 'A' && (
                         <>
-                          <div className={styles.controlRow}><span>Sentence Chunking</span><button className={`${styles.smallToggle} ${chunkingEnabled ? styles.smallToggleOn : ''}`} onClick={() => setChunkingEnabled((v) => !v)}>{chunkingEnabled ? 'On' : 'Off'}</button></div>
+                          <div id="tour-chunking-toggle" className={styles.controlRow}><span>Sentence Chunking</span><button className={`${styles.smallToggle} ${chunkingEnabled ? styles.smallToggleOn : ''}`} onClick={() => setChunkingEnabled((v) => !v)}>{chunkingEnabled ? 'On' : 'Off'}</button></div>
                           <div className={styles.readOnlyLine}>Chunk size up to {activeConfig.maxChunkWords} words</div>
                         </>
                       )}
@@ -1076,18 +995,18 @@ function AdaptPage() {
                 </div>
 
                 {preset !== 'A' && (
-                  <div className={styles.sidebarSection}>
+                  <div id="tour-focus-section" className={styles.sidebarSection}>
                     {renderSectionHeader('focus', 'Focus Tools')}
                     {sectionOpen.focus && (
                       <div className={styles.sectionBody}>
-                        <div className={styles.controlRow}><span>Focus Mode</span><button className={`${styles.smallToggle} ${focusMode ? styles.smallToggleOn : ''}`} onClick={() => setFocusMode((v) => !v)}>{focusMode ? 'On' : 'Off'}</button></div>
+                        <div id="tour-focus-toggle" className={styles.controlRow}><span>Focus Mode</span><button className={`${styles.smallToggle} ${focusMode ? styles.smallToggleOn : ''}`} onClick={() => setFocusMode((v) => !v)}>{focusMode ? 'On' : 'Off'}</button></div>
                         <div className={styles.controlRow}><span>Focus Line</span><button className={`${styles.smallToggle} ${focusLineEnabled ? styles.smallToggleOn : ''}`} onClick={() => setFocusLineEnabled((v) => !v)}>{focusLineEnabled ? 'On' : 'Off'}</button></div>
                       </div>
                     )}
                   </div>
                 )}
 
-                <div className={styles.sidebarSection}>
+                <div id="tour-appearance-section" className={styles.sidebarSection}>
                   {renderSectionHeader('appearance', 'Appearance')}
                   {sectionOpen.appearance && (
                     <div className={styles.sectionBody}>
@@ -1107,44 +1026,17 @@ function AdaptPage() {
                   )}
                 </div>
 
-                {preset === 'C' && (
-                  <div className={styles.sidebarSection}>
-                    {renderSectionHeader('advanced', 'Advanced')}
-                    {sectionOpen.advanced && (
-                      <div className={styles.sectionBody}>
-                        <button
-                          className={`btn btn-ghost ${styles.fullWidthBtn} ${!canUseCustomBuilder ? styles.disabledAction : ''}`}
-                          onClick={() => {
-                            if (canUseCustomBuilder) router.push('/custom-builder');
-                            else setUpgradeNudge('Custom Builder is available while preview runs or on Pro.');
-                          }}
-                        >
-                          Open Custom Builder
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
 
                 <div className={styles.sidebarFooter}>
-                  <button className={`btn btn-ghost ${styles.fullWidthBtn}`} onClick={handleTTS}>{ttsActive ? 'Stop TTS' : 'Start TTS'}</button>
+                  <button id="tour-tts-btn" className={`btn btn-ghost ${styles.fullWidthBtn}`} onClick={handleTTS}>{ttsActive ? 'Stop TTS' : 'Start TTS'}</button>
                   {preset !== 'A' && (
                     <button
-                      className={`btn btn-primary ${styles.fullWidthBtn} ${!canUseSummary ? styles.disabledAction : ''}`}
+                      id="tour-summary-btn"
+                      className={`btn btn-primary ${styles.fullWidthBtn}`}
                       onClick={() => {
-                        if (!canUseSummary) {
-                          setUpgradeNudge('Summary is available while preview runs or on Pro.');
-                          return;
-                        }
                         if (summaryLoading) return;
-                        if (showSummary) {
-                          setShowSummary(false);
-                          return;
-                        }
-                        if (summaryBullets.length > 0) {
-                          setShowSummary(true);
-                          return;
-                        }
+                        if (showSummary) { setShowSummary(false); return; }
+                        if (summaryBullets.length > 0) { setShowSummary(true); return; }
                         fetchSummary();
                       }}
                     >
@@ -1153,16 +1045,35 @@ function AdaptPage() {
                   )}
                 </div>
               </>
-            )}
-          </>
-        ) : (
-          <div className={styles.sidebarCollapsedRail}>
-            <button onClick={() => setSidebarCollapsed(false)} aria-label="Open controls" title="Open controls">‹</button>
+            </>
+          ) : (
+            <div className={styles.sidebarCollapsedRail}>
+              <button onClick={() => setSidebarCollapsed(false)} aria-label="Open controls" title="Open controls">‹</button>
+            </div>
+          )}
+        </aside>
+
+        {/* Guided tour — fires on first visit, preset-specific re-fires */}
+        {!showSignUpGate && <AdaptTour preset={preset} />}
+
+        {/* Sign-up gate overlay — shown after 5 min for unauthenticated users */}
+        {showSignUpGate && (
+          <div className={styles.signUpGate}>
+            <div className={styles.signUpGateCard}>
+              <Image src="/logo.png" alt="Readapt" width={56} height={56} className={styles.signUpGateLogo} />
+              <h2 className={styles.signUpGateTitle}>Your free reading session has ended</h2>
+              <p className={styles.signUpGateSub}>
+                Create a free account to keep reading with all presets &mdash; no payment required.
+              </p>
+              <div className={styles.signUpGateBtns}>
+                <Link href="/auth/login?mode=signup" className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }}>Create Free Account</Link>
+                <Link href="/auth/login" className="btn btn-ghost" style={{ width: '100%', justifyContent: 'center' }}>Log In</Link>
+              </div>
+            </div>
           </div>
         )}
-      </aside>
-    </div>
-  );
+      </div>
+    );
 }
 
 export default function AdaptPageWrapper() {

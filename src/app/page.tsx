@@ -329,7 +329,7 @@ export default function LandingPage() {
           {/* Row 6: Custom Builder */}
           <div className={styles.featureRow}>
             <div className={styles.featureText}>
-              <h3 className={styles.featureName}>Custom Builder <span className="pro-badge">Pro</span></h3>
+              <h3 className={styles.featureName}>Custom Builder</h3>
               <p className={styles.featureDesc}>
                 Build your own reading mode manually: text size, spacing, contrast, width, reveal behavior, and chunking intensity. Preview every tweak live, then save and apply instantly.
               </p>
