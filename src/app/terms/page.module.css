@@ -39,3 +39,22 @@
   color: var(--text-secondary);
   line-height: 1.7;
 }
+
+.section p + p {
+  margin-top: 10px;
+}
+
+.section ul {
+  margin: 10px 0 0 18px;
+  color: var(--text-secondary);
+}
+
+.section li {
+  margin-bottom: 8px;
+  line-height: 1.7;
+}
+
+.section strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
